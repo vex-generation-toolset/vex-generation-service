@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2025-present OpenRefactory, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# License compliance checker
+reuse==5.1.1

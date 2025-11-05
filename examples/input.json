@@ -1,0 +1,83 @@
+{
+  "cve_id": "CVE-2025-48924",
+  "purl": "pkg:maven/org.apache.commons/commons-lang3",
+  "root_cause_functions": [
+    "org.apache.commons.lang3.ClassUtils.getClass(String)",
+    "org.apache.commons.lang3.ClassUtils.getClass(String, boolean)",
+    "org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String)",
+    "org.apache.commons.lang3.ClassUtils.getClass(ClassLoader, String,boolean)"
+  ],
+  "chains": [
+    [
+      {
+        "purl": "pkg:maven/org.apache.commons/commons-text@1.10.0",
+        "callgraph": "file:///home/groot/src/github/openref/vex-generation-service/commons-text-1.10.0-20251021130403_cg.json"
+      },
+      {
+        "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
+        "callgraph": "file:///home/groot/src/github/openref/vex-generation-service/commons-lang-3.12.0-20251021123942_cg.json"
+      }
+    ]
+  ],
+  "vex": {
+    "cwes": [
+      674
+    ],
+    "detail": "Uncontrolled Recursion vulnerability in Apache Commons Lang. This issue affects Apache Commons Lang: Starting with commons-lang:commons-lang 2.0 to 2.6, and, from org.apache.commons:commons-lang3 3.0 before 3.18.0. The methods ClassUtils.getClass(...) can throw StackOverflowError on very long inputs. Because an Error is usually not handled by applications and libraries, a StackOverflowError could cause an application to stop. Users are recommended to upgrade to version 3.18.0, which fixes the issue.",
+    "created": "2025-07-11T07:24:15.093Z",
+    "credits": {
+      "individuals": [
+        {
+          "name": ""
+        }
+      ]
+    },
+    "ratings": [
+      {
+        "score": "5.3",
+        "method": "CVSS:3.1",
+        "source": {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48924",
+          "name": "NVD"
+        },
+        "vector": "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+        "severity": "medium"
+      }
+    ],
+    "sources": [
+      {
+        "source": {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48924",
+          "name": "NVD"
+        }
+      }
+    ],
+    "updated": "2024-07-28T07:24:15.093Z",
+    "published": "2022-07-11T05:15:09.070Z",
+    "advisories": [],
+    "references": [
+      {
+        "id": "",
+        "source": {
+          "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48924",
+          "name": "NVD"
+        }
+      },
+      {
+        "id": "",
+        "source": {
+          "url": "https://osv.dev/vulnerability/CVE-2025-48924",
+          "name": "OSV DEV"
+        }
+      },
+      {
+        "source": {
+          "url": "https://security-tracker.debian.org/tracker/CVE-2025-48924",
+          "name": "Debian Security Tracker"
+        }
+      }
+    ],
+    "description": "Uncontrolled Recursion vulnerability in Apache Commons Lang. This issue affects Apache Commons Lang: Starting with commons-lang:commons-lang 2.0 to 2.6, and, from org.apache.commons:commons-lang3 3.0 before 3.18.0. The methods ClassUtils.getClass(...) can throw StackOverflowError on very long inputs. Because an Error is usually not handled by applications and libraries, a StackOverflowError could cause an application to stop. Users are recommended to upgrade to version 3.18.0, which fixes the issue.",
+    "recommendation": ""
+  }
+}

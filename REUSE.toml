@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2025-present OpenRefactory, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+
+#
+# Note: `reuse lint` requires every file in the repository to carry explicit
+# licensing information (except for the license texts themselves). This includes
+# the NOTICE file, even though NOTICE is typically considered part of the license
+# rather than a standalone work.
+#
+[[annotations]]
+path = "NOTICE"
+SPDX-License-Identifier = "Apache-2.0"
