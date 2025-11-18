@@ -153,16 +153,23 @@ class VexGenerator:
         affected_list = "\n - ".join(affected_methods)
 
         msg = f"{self.cve_id}, reported in {name(affected_package.purl)}, {'directly impacts' if reachable else 'does not impact'} {name(package.purl)}.\n"
-        msg += f"\nThe dependency chain from {name(package.purl)} to {name(affected_package.purl)} is shown here (──> means depends on):\n"
-        msg += (
-            "\n"
-            + " ──> ".join(
-                [name(self.chain[i].purl) for i in range(package_idx, len(self.chain))]
+        if package_idx < len(self.chain) - 1:
+            msg += f"\nThe dependency chain from {name(package.purl)} to {name(affected_package.purl)} is shown here (──> means depends on):\n"
+            msg += (
+                "\n"
+                + " ──> ".join(
+                    [
+                        name(self.chain[i].purl)
+                        for i in range(package_idx, len(self.chain))
+                    ]
+                )
+                + "\n"
             )
-            + "\n"
-        )
-        msg += f"\nThe root cause functions in {name(affected_package.purl)} are:\n"
-        msg += f"\n - {affected_list}\n"
+        if len(affected_methods) < 1:
+            msg += "\nWe did not find any root cause function."
+        else:
+            msg += f"\nThe root cause functions in {name(affected_package.purl)} are:\n"
+            msg += f"\n - {affected_list}\n"
         # TODO:
         # Once we get the root cause explanations, we will be able to show rationale
         # behind each root cause found using llm summary
@@ -181,9 +188,10 @@ class VexGenerator:
                 formatted_path = "\n└─>".join(path)
                 formatted_paths.append(formatted_path)
 
-            msg += f"\nHere is a call chain that shows how a root cause function is called from {name(package.purl)}\n"
-            msg += f"\n{formatted_paths[0]}\n"
-            msg += f"\nThere are {len(formatted_paths) - 1} other traces in which at least one root cause function is called from {name(package.purl)}\n"
+            if len(formatted_paths) > 0:
+                msg += f"\nHere is a call chain that shows how a root cause function is called from {name(package.purl)}\n"
+                msg += f"\n{formatted_paths[0]}\n"
+                msg += f"\nThere are {len(formatted_paths) - 1} other traces in which at least one root cause function is called from {name(package.purl)}\n"
 
         else:
             # Case 2: The bug is unreachable from the first downstream package
@@ -198,10 +206,12 @@ class VexGenerator:
                 for path in unreachable_paths:
                     formatted_path = "\n└─>".join(path)
                     formatted_paths.append(formatted_path)
-                msg += f"\nThe first downstream package, {name(package.purl)}, has {len(unreachable_paths)} calls to different methods in {name(affected_package.purl)}, but none of them calls any of the root cause functions. Here is an example call chain:\n"
-                msg += f"\n{formatted_paths[0]}\n"
-                msg += f"\nSince the root cause functions are not reachable at {name(package.purl)}, the packages further downstream are not affected.\n"
-                msg += f"\n{name(package.purl)} does not need an update\n"
+
+                if len(formatted_paths) > 0:
+                    msg += f"\nThe first downstream package, {name(package.purl)}, has {len(unreachable_paths)} calls to different methods in {name(affected_package.purl)}, but none of them calls any of the root cause functions. Here is an example call chain:\n"
+                    msg += f"\n{formatted_paths[0]}\n"
+                    msg += f"\nSince the root cause functions are not reachable at {name(package.purl)}, the packages further downstream are not affected.\n"
+                    msg += f"\n{name(package.purl)} does not need an update\n"
             else:
                 # Case 3: The bug is unreachable from other downstream package
                 for i in range(len(self.chain) - 2, package_idx, -1):
@@ -217,8 +227,9 @@ class VexGenerator:
                         for path in reachable_paths:
                             formatted_path = "\n└─>".join(path)
                             formatted_paths.append(formatted_path)
-                        msg += f"\nThe {'first' if i == len(self.chain) - 2 else 'next'} downstream package, {name(downstream_package.purl)}, calls at least one of the vulnerable functions. Here is an example call chain:\n"
-                        msg += f"\n{formatted_paths[0]}\n"
+                        if len(formatted_paths) > 0:
+                            msg += f"\nThe {'first' if i == len(self.chain) - 2 else 'next'} downstream package, {name(downstream_package.purl)}, calls at least one of the vulnerable functions. Here is an example call chain:\n"
+                            msg += f"\n{formatted_paths[0]}\n"
                     else:
                         unreachable_paths = [
                             [call.callerName for call in call_chain]
@@ -230,7 +241,8 @@ class VexGenerator:
                         for path in unreachable_paths:
                             formatted_path = "\n└─>".join(path)
                             formatted_paths.append(formatted_path)
-                        if len(unreachable_paths) > 0:
+
+                        if len(formatted_paths) > 0:
                             msg += f"\nThe next downstream package, {name(downstream_package.purl)}, has {len(unreachable_paths)} calls to different methods in {name(self.chain[i + 1].purl)}, but none of them calls any of the root cause functions. An example is given here.\n"
                             msg += f"\n{formatted_paths[0]}\n"
                             msg += f"\nSince the root cause functions are not reachable at {name(downstream_package.purl)}, the packages further downstream are not affected.\n"

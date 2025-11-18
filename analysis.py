@@ -171,9 +171,6 @@ class Analysis:
             [func for path in affected_paths for func in path]
         )
 
-        if len(unique_function_indices) == 0:
-            return
-
         unique_funcs_in_affected_paths = affected.get_functions(unique_function_indices)
         unique_funcs_not_in_affected_path = affected.get_other_functions(
             unique_function_indices
