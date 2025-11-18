@@ -10,6 +10,13 @@ VGS, or VEX Generation Service is a part of Project Clean Beach. This service ge
 
 ## Getting Started
 
+### Requirements
+
+- Tested on `**python3.12**` and newer.
+- No additional dependency is required.
+
+### Run
+
 - Create an `input.json` file in the format described in [`examples/input.json`](./examples/input.json) file. And run the script in the following way:
 
     ```bash
@@ -18,4 +25,4 @@ VGS, or VEX Generation Service is a part of Project Clean Beach. This service ge
 
 ## Contributions
 
-For developing a new feature, create an issue related to that feature or enhancement. Then create a branch from `master`/`main` called `dev-X` where `X` is the issue number. Changes should be made to that branch. Upon finalization, the commits of the feature branch should be rebased against `master`/`main` and then squashed into a single one. Then that commit will be cherry-picked to the main branch. The old branch (`dev-XXX`) will be deleted.
+For developing a new feature, create an issue related to that feature or enhancement. Then create a branch from `master`/`main` called `X-dev` where `X` is the issue number. Changes should be made to that branch. Upon finalization, the commits of the feature branch should be rebased against `master`/`main` and then squashed into a single one. Then that commit will be cherry-picked to the main branch. The old branch (`X-dev`) will be deleted.
