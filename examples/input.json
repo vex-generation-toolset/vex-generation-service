@@ -11,11 +11,11 @@
     [
       {
         "purl": "pkg:maven/org.apache.commons/commons-text@1.10.0",
-        "callgraph": "file:///home/groot/src/github/openref/vex-generation-service/commons-text-1.10.0-20251021130403_cg.json"
+        "callgraph": "file:///home/groot/dev/work/vex-generation-service/commons-text-1.10.0-20251021130403_cg.json"
       },
       {
         "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0",
-        "callgraph": "file:///home/groot/src/github/openref/vex-generation-service/commons-lang-3.12.0-20251021123942_cg.json"
+        "callgraph": "file:///home/groot/dev/work/vex-generation-service/commons-lang-3.12.0-20251021123942_cg.json"
       }
     ]
   ],
