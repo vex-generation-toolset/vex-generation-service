@@ -65,7 +65,7 @@
                     "verdict": "update",
                     "message": "CVE-2025-48924, reported in commons-lang3@3.12.0, directly impacts commons-text@1.10.0.\n\nThe dependency chain from commons-text@1.10.0 to commons-lang3@3.12.0 is shown here (\u2500\u2500> means depends on):\n\ncommons-text@1.10.0 \u2500\u2500> commons-lang3@3.12.0\n\nThe root cause functions in commons-lang3@3.12.0 are:\n\n - org.apache.commons.lang3.ClassUtils.getClass(String)\n - org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String)\n\nHere is a call chain that shows how a root cause function is called from commons-text@1.10.0\n\norg.apache.commons.text.StringSubstitutor#replace(String,int,int)\n\u2514\u2500>org.apache.commons.text.StringSubstitutor#substitute(TextStringBuilder,int,int)\n\u2514\u2500>org.apache.commons.text.StringSubstitutor#substitute(TextStringBuilder,int,int,List<String>)\n\u2514\u2500>org.apache.commons.text.StringSubstitutor#resolveVariable(String,TextStringBuilder,int,int)\n\u2514\u2500>org.apache.commons.text.lookup.ConstantStringLookup#lookup(String)\n\u2514\u2500>org.apache.commons.text.lookup.ConstantStringLookup#resolveField(String,String)\n\u2514\u2500>org.apache.commons.text.lookup.ConstantStringLookup#fetchClass(String)\n\u2514\u2500>org.apache.commons.lang3.ClassUtils.getClass(String)\n\u2514\u2500>org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n\nThere are 305 other traces in which at least one root cause function is called from commons-text@1.10.0\n",
                     "author": "VGS",
-                    "timestamp": "2025-11-05 12:13:42"
+                    "timestamp": "2025-11-18 23:38:35"
                   }
                 ],
                 "root_cause_methods": [
@@ -28828,9 +28828,9 @@
                 "explanations": [
                   {
                     "verdict": "update",
-                    "message": "CVE-2025-48924, reported in commons-lang3@3.12.0, directly impacts commons-lang3@3.12.0.\n\nThe dependency chain from commons-lang3@3.12.0 to commons-lang3@3.12.0 is shown here (\u2500\u2500> means depends on):\n\ncommons-lang3@3.12.0\n\nThe root cause functions in commons-lang3@3.12.0 are:\n\n - org.apache.commons.lang3.ClassUtils.getClass(String)\n - org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String)\n\nHere is a call chain that shows how a root cause function is called from commons-lang3@3.12.0\n\norg.apache.commons.lang3.ClassUtils.getClass(String)\n\u2514\u2500>org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n\nThere are 2 other traces in which at least one root cause function is called from commons-lang3@3.12.0\n",
+                    "message": "CVE-2025-48924, reported in commons-lang3@3.12.0, directly impacts commons-lang3@3.12.0.\n\nThe root cause functions in commons-lang3@3.12.0 are:\n\n - org.apache.commons.lang3.ClassUtils.getClass(String)\n - org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String,boolean)\n - org.apache.commons.lang3.ClassUtils.getClass(ClassLoader,String)\n\nHere is a call chain that shows how a root cause function is called from commons-lang3@3.12.0\n\norg.apache.commons.lang3.ClassUtils.getClass(String)\n\u2514\u2500>org.apache.commons.lang3.ClassUtils.getClass(String,boolean)\n\nThere are 2 other traces in which at least one root cause function is called from commons-lang3@3.12.0\n",
                     "author": "VGS",
-                    "timestamp": "2025-11-05 12:13:42"
+                    "timestamp": "2025-11-18 23:38:35"
                   }
                 ],
                 "root_cause_methods": [
