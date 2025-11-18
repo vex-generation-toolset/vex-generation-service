@@ -201,7 +201,7 @@ class Analysis:
             if len(unique_function_indices) == 0:
                 pkg.reachable = False
                 sinks = candidate.find_sinks(unique_funcs_not_in_affected_path)
-                unreachable_paths = candidate.find_paths(sinks)
+                unreachable_paths = candidate.find_paths(sinks, 5)
                 unreachable_call_chains = [
                     candidate.find_call_chain(unreachable_path)
                     for unreachable_path in unreachable_paths

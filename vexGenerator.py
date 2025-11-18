@@ -166,7 +166,7 @@ class VexGenerator:
                 + "\n"
             )
         if len(affected_methods) < 1:
-            msg += "\nWe did not find any root cause function."
+            msg += "\nWe did not find any root cause function.\n"
         else:
             msg += f"\nThe root cause functions in {name(affected_package.purl)} are:\n"
             msg += f"\n - {affected_list}\n"
@@ -246,10 +246,7 @@ class VexGenerator:
                             msg += f"\nThe next downstream package, {name(downstream_package.purl)}, has {len(unreachable_paths)} calls to different methods in {name(self.chain[i + 1].purl)}, but none of them calls any of the root cause functions. An example is given here.\n"
                             msg += f"\n{formatted_paths[0]}\n"
                             msg += f"\nSince the root cause functions are not reachable at {name(downstream_package.purl)}, the packages further downstream are not affected.\n"
-
-                        msg += (
-                            f"{name(downstream_package.purl)} does not need an update"
-                        )
+                            msg += f"\n{name(downstream_package.purl)} does not need an update\n"
 
         return textwrap.dedent(msg)
 
