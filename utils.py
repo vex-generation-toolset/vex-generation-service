@@ -24,6 +24,10 @@ def load_graph(filename: str | Path) -> Graph:
     return Graph(filename=filename)
 
 
+def name(purl: str) -> str:
+    return purl.split("/")[-1]
+
+
 @dataclass
 class Package:
     """Package

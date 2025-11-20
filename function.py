@@ -71,6 +71,7 @@ class Function:
             # search the pattern in the other function name in canonical format
             # if both functions are in the canonical format and same, they are supposed to match
             if re.search(pattern, other):
+                # print(f"[+] found a match: {self.name} == {other}")
                 return True
 
             return False
@@ -99,7 +100,7 @@ class Function:
 
             match_found &= self.parameterTypes == other.parameterTypes
             # if match_found:
-            #     print(f"Matched: {self.name} == {other.name}")
+            #     print(f"[+] found a match: {self.name} == {other.name}")
             return match_found
 
         match other:
