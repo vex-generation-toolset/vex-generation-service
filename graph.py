@@ -171,6 +171,10 @@ class Graph:
         Returns:
             Unique list of function indices
         """
+        # TODO: optimize for better efficiency
+        # the time complexity to find sinks is O(n*m). where,
+        # n = the number of functions in the callgraph
+        # m = the number of functions in the query
         return list(set([i for i, f in enumerate(self.functions) if f in functions]))
 
     def get_functions(self, indices: List[int]):

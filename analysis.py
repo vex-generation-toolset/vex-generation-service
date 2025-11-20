@@ -11,7 +11,7 @@ from typing import List
 
 from function import Function
 from graph import Call
-from utils import Package, load_graph
+from utils import Package, load_graph, name
 from vexDocument import PackageToVex
 from vexGenerator import VexGenerator
 
@@ -164,9 +164,16 @@ class Analysis:
 
         merged_paths: List[List[Function]] = []
 
-        affected = load_graph(chain[-1].callgraph)
+        pkg = chain[-1]
+        print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
+        print(f"[+] loading callgraph for {name(pkg.purl)} from {pkg.callgraph}")
+        affected = load_graph(pkg.callgraph)
+        print(f"[+] found {len(affected.functions)} functions in the callgraph")
+        print("[+] identifying the root cause functions in the callgraph")
         sinks = affected.find_sinks(self.root_cause_functions)
-        affected_paths = affected.find_paths(sinks)
+        print(f"[+] identified {len(sinks)} sink(s)")
+        print("[+] finding call chains to the identified sinks")
+        affected_paths = affected.find_paths(sinks, 10)
         unique_function_indices = get_unique_funcs(
             [func for path in affected_paths for func in path]
         )
@@ -184,12 +191,24 @@ class Analysis:
             affected.find_call_chain(affected_path) for affected_path in affected_paths
         ]
 
+        print(f"[+] found {len(merged_call_chains)} call chain(s) to the sinks")
+        print(
+            f"[+] found {len(unique_funcs_in_affected_paths)} unique function(s) in the call chains"
+        )
         chain[-1].reachable_paths = merged_call_chains
 
         for pkg in chain[-2::-1]:
+            print(f"[+] analyzing {name(pkg.purl)}")
+            print(f"[+] loading callgraph for {name(pkg.purl)} from {pkg.callgraph}")
             candidate = load_graph(pkg.callgraph)
+            print(f"[+] found {len(candidate.functions)} functions in the callgraph")
+            print(
+                "[+] identifying unique functions in the affected call chains in the callgraph"
+            )
             sinks = candidate.find_sinks(unique_funcs_in_affected_paths)
-            affected_paths = candidate.find_paths(sinks)
+            print(f"[+] identified {len(sinks)} sink(s)")
+            print("[+] finding call chains to the identified sinks")
+            affected_paths = candidate.find_paths(sinks, 10)
             affected_call_chains = [
                 candidate.find_call_chain(affected_path)
                 for affected_path in affected_paths
@@ -200,12 +219,22 @@ class Analysis:
 
             if len(unique_function_indices) == 0:
                 pkg.reachable = False
+                print("[+] did not find any call chain to the identified sinks")
+                print(f"[+] {name(pkg.purl)} is not affected by {self.cve_id}")
+                print(
+                    "[+] identifying unique functions not in the affected call chains in the callgraph"
+                )
                 sinks = candidate.find_sinks(unique_funcs_not_in_affected_path)
+                print(f"[+] identified {len(sinks)} sink(s)")
+                print("[+] finding call chains to the identified sinks")
                 unreachable_paths = candidate.find_paths(sinks, 5)
                 unreachable_call_chains = [
                     candidate.find_call_chain(unreachable_path)
                     for unreachable_path in unreachable_paths
                 ]
+                print(
+                    f"[+] found {len(unreachable_call_chains)} call chain(s) to the sinks"
+                )
                 pkg.unreachable_paths = unreachable_call_chains
                 break
 
@@ -223,12 +252,19 @@ class Analysis:
             merged_call_chains = merge_call_chains(
                 affected_call_chains, merged_call_chains
             )
+
+            print(f"[+] found {len(merged_call_chains)} call chain(s) to the sinks")
+            print(
+                f"[+] found {len(unique_funcs_in_affected_paths)} unique function(s) in the call chains"
+            )
+            print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
             pkg.reachable_paths = merged_call_chains
 
     def run(self):
         """Run reachability analysis"""
-        for chain in self.chains:
+        for i, chain in enumerate(self.chains):
             self.analyze(chain)
+            print(f"[+] analysis complete for chain index {i}")
 
     def export_vex(self, output: str | Path):
         """Export the analysis vex reports
@@ -236,6 +272,7 @@ class Analysis:
         Args:
             output: path to output file
         """
+        print("[+] populting VEX document")
         vex_chains: List[List[PackageToVex]] = []
         for chain in self.chains:
             generator = VexGenerator(
@@ -249,13 +286,16 @@ class Analysis:
             vex_chains.append(vex_chain)
 
         for vex_chain in vex_chains:
+            print()
             for vex in vex_chain:
                 print(
                     vex.vex.vulnerabilities[0].analysis.detail.explanations[0].message
                 )
                 print("=" * 120)
+        print("[+] writing VEX document")
         json.dump(
             [[asdict(vex) for vex in vex_chain] for vex_chain in vex_chains],
             open(output, "w"),
             indent=2,
         )
+        print("[+] finished writing VEX document")
