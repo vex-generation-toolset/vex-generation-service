@@ -214,13 +214,13 @@ class VexGenerator:
                     msg += f"\n{name(pkg.purl)} does not need an update\n"
             else:
                 # Case 3: The bug is unreachable from other downstream package
-                for i in range(len(self.chain) - 2, pkg_idx, -1):
+                for i in range(len(self.chain) - 2, pkg_idx - 1, -1):
                     downstream_package = self.chain[i]
                     if downstream_package.reachable:
                         reachable_paths = [
                             [call.callerName for call in call_chain]
                             + [call_chain[-1].calleeName]
-                            for call_chain in pkg.reachable_paths
+                            for call_chain in downstream_package.reachable_paths
                             if len(call_chain) > 0
                         ]
                         formatted_paths: List[str] = []
@@ -234,7 +234,7 @@ class VexGenerator:
                         unreachable_paths = [
                             [call.callerName for call in call_chain]
                             + [call_chain[-1].calleeName]
-                            for call_chain in pkg.unreachable_paths
+                            for call_chain in downstream_package.unreachable_paths
                             if len(call_chain) > 0
                         ]
                         formatted_paths: List[str] = []
