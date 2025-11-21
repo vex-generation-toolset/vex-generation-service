@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import shutil
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
@@ -36,8 +35,6 @@ class Analysis:
     def setup(self):
         """setup the environment for analysis"""
         self.download_path = Path("/tmp/callgraphs/").absolute()
-        if self.download_path.exists():
-            shutil.rmtree(self.download_path)
         self.download_path.mkdir(exist_ok=True)
 
     def load(self, input: str | Path):
@@ -59,13 +56,16 @@ class Analysis:
                 Package
             """
 
+            purl = pkg.get("purl")
             callgraph_url = pkg.get("callgraph")
             filename = f"{self.download_path.as_posix()}/{
-                pkg.get('purl').replace(':', '_').replace('/', '_').replace('@', '_')
+                purl.replace(':', '_').replace('/', '_').replace('@', '_')
             }.json"
+            print(
+                f"[+] downloading callgraph for {name(purl)} from {callgraph_url} to {filename}"
+            )
             subprocess.run(
-                ["curl", "-o", filename, callgraph_url],
-                # f"curl -o '{filename}' '{callgraph_url}'",
+                ["curl", "-o", filename, "-C", "-", callgraph_url],
                 capture_output=True,
                 timeout=20,
             )
@@ -131,21 +131,36 @@ class Analysis:
 
                 add_call_chain_a_once = False
                 for call_chain_b in call_chains_b:
-                    if len(call_chain_b) < 1:
+                    last_call_b = call_chain_b[-1]
+                    # Here, we handle 2 specific scenarios:
+                    # 1. assume call_chain_b = []
+                    # this can happen if the affected functions are not being called inside
+                    # package b by any other function. in that case there will be no call
+                    # chain to the affected functions in graph b
+                    # 2. assume package a directly calls the callee function of the last call of call_chain_b
+                    # in that case, last_call_a.calleeName == last_call_b.calleeName
+                    #
+                    # In both of these cases, call_chain_a should be added to the merged_call_chains once
+                    if (
+                        len(call_chain_b) < 1
+                        or last_call_a.calleeName == last_call_b.calleeName
+                    ):
                         add_call_chain_a_once = True
                         continue
-                    first_call_b = call_chain_b[0]
-                    if last_call_a.calleeName == first_call_b.callerName:
-                        merged_call_chains.append(call_chain_a + call_chain_b)
 
-                # Here, we handle a specific scenario:
-                # assume package b is a library package and the vulnerable functions
-                # are not being called by any other functions in the same package
-                # Now, we have call_chains_b = []
-                # But assume, package a is using the vulnerable functions from package b
-                # we now have a call to the vulnerable function in package a
-                # this call has a call chain, i.e., call_chain_a
-                # we need to add this call chain to the merged call chain
+                    first_call_to_last_callee = next(
+                        (
+                            i
+                            for i, call in enumerate(call_chain_b)
+                            if last_call_a.calleeName == call.callerName
+                        ),
+                        None,
+                    )
+                    if first_call_to_last_callee is not None:
+                        merged_call_chains.append(
+                            call_chain_a[:-1] + call_chain_b[first_call_to_last_callee:]
+                        )
+
                 if add_call_chain_a_once:
                     merged_call_chains.append(call_chain_a)
 
@@ -173,7 +188,7 @@ class Analysis:
         sinks = affected.find_sinks(self.root_cause_functions)
         print(f"[+] identified {len(sinks)} sink(s)")
         print("[+] finding call chains to the identified sinks")
-        affected_paths = affected.find_paths(sinks, 10)
+        affected_paths = affected.find_paths(sinks)
         unique_function_indices = get_unique_funcs(
             [func for path in affected_paths for func in path]
         )
@@ -208,7 +223,7 @@ class Analysis:
             sinks = candidate.find_sinks(unique_funcs_in_affected_paths)
             print(f"[+] identified {len(sinks)} sink(s)")
             print("[+] finding call chains to the identified sinks")
-            affected_paths = candidate.find_paths(sinks, 10)
+            affected_paths = candidate.find_paths(sinks)
             affected_call_chains = [
                 candidate.find_call_chain(affected_path)
                 for affected_path in affected_paths
@@ -225,9 +240,11 @@ class Analysis:
                     "[+] identifying unique functions not in the affected call chains in the callgraph"
                 )
                 sinks = candidate.find_sinks(unique_funcs_not_in_affected_path)
-                print(f"[+] identified {len(sinks)} sink(s)")
+                print(
+                    f"[+] identified {len(sinks)} sink(s) from {len(unique_funcs_not_in_affected_path)} unique function(s)"
+                )
                 print("[+] finding call chains to the identified sinks")
-                unreachable_paths = candidate.find_paths(sinks, 5)
+                unreachable_paths = candidate.find_paths(sinks, 10)
                 unreachable_call_chains = [
                     candidate.find_call_chain(unreachable_path)
                     for unreachable_path in unreachable_paths
@@ -249,6 +266,7 @@ class Analysis:
                 candidate.get_functions(path_indices) for path_indices in affected_paths
             ]
             merged_paths = merge_paths(affected_function_paths, merged_paths)
+
             merged_call_chains = merge_call_chains(
                 affected_call_chains, merged_call_chains
             )
