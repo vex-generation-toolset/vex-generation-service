@@ -60,9 +60,8 @@ class Analysis:
             """
 
             callgraph_url = pkg.get("callgraph")
-            filename = f"{self.download_path.as_posix()}/{
-                pkg.get('purl').replace(':', '_').replace('/', '_').replace('@', '_')
-            }.json"
+            safe_purl = pkg.get('purl').replace(':', '_').replace('/', '_').replace('@', '_')
+            filename = f"{self.download_path.as_posix()}/{safe_purl}.json"
             subprocess.run(
                 ["curl", "-o", filename, callgraph_url],
                 # f"curl -o '{filename}' '{callgraph_url}'",

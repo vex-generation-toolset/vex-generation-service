@@ -59,11 +59,9 @@ class Function:
             match self.language:
                 # build a dynamic pattern using regular expression in the canonical format from the functino object
                 case "java":
-                    pattern = rf"{
-                        '' if self.package == '' else re.escape(self.package + '.')
-                    }{re.escape(self.type)}[.#]{self.function}\({
-                        ', *'.join([re.escape(p) for p in self.parameterTypes])
-                    }\)"
+                    escaped_package = '' if self.package == '' else re.escape(self.package + '.')
+                    escaped_parameterTypes = ', *'.join([re.escape(p) for p in self.parameterTypes])
+                    pattern = rf"{escaped_package}{re.escape(self.type)}[.#]{self.function}\({escaped_parameterTypes}\)"
 
                 case _:
                     return False
