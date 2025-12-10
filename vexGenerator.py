@@ -6,7 +6,6 @@
 import textwrap
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Tuple
 
 from analysisReport import (
     AnalysisDetail,
@@ -53,23 +52,23 @@ class VexGenerator:
         self,
         cve_id: str,
         vex_helper,
-        chain: List[Package],
-        root_cause_functions: List[str],
-        identified_root_cause_functions: List[Function],
+        chain: list[Package],
+        root_cause_functions: list[str],
+        identified_root_cause_functions: list[Function],
         purl: str,
     ):
         """initialize the vex generator"""
 
         self.cve_id: str = cve_id
         self.vex_helper = vex_helper
-        self.chain: List[Package] = chain
-        self.root_cause_functions: List[str] = root_cause_functions
-        self.identified_root_cause_functions: List[Function] = (
+        self.chain: list[Package] = chain
+        self.root_cause_functions: list[str] = root_cause_functions
+        self.identified_root_cause_functions: list[Function] = (
             identified_root_cause_functions
         )
         self.affected: str = purl
 
-    def get_detail(self, pkg_idx: int) -> Tuple[str, AnalysisDetail]:
+    def get_detail(self, pkg_idx: int) -> tuple[str, AnalysisDetail]:
         """Generates detail field for each of the package in chain
 
         Args:
@@ -235,7 +234,7 @@ class VexGenerator:
             state=state, justification=justification, response=response, detail=detail
         )
 
-    def populate_list_of_vex(self) -> List[PackageToVex]:
+    def populate_list_of_vex(self) -> list[PackageToVex]:
         """Generate the full VEX document based on analysis reports and helper metadata,
         and safely append it to a JSON array in the specified file.
 
@@ -264,7 +263,7 @@ class VexGenerator:
             if credits_data
             else None
         )
-        package_to_vex: List[PackageToVex] = []
+        package_to_vex: list[PackageToVex] = []
 
         for pkg_idx, pkg in enumerate(self.chain):
             analysis = self.get_analysis_report(pkg_idx)

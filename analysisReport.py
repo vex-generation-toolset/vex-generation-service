@@ -5,7 +5,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
 
 from graph import Call
 
@@ -57,8 +56,8 @@ class ArtifactReachability:
     """
 
     reachable: bool
-    reachable_paths: List[List[Call]]
-    unreachable_paths: List[List[Call]]
+    reachable_paths: list[list[Call]]
+    unreachable_paths: list[list[Call]]
 
 
 @dataclass
@@ -94,8 +93,8 @@ class AnalysisDetail:
             that lead to the vulnerable method, in order of the dependency chain.
     """
 
-    explanations: List[Explanation]
-    root_cause_methods: List[str]
+    explanations: list[Explanation]
+    root_cause_methods: list[str]
     reachability_trace: ArtifactReachability
 
 

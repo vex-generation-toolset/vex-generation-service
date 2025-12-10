@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 from analysisReport import AnalysisReport
 
@@ -91,13 +91,13 @@ class CreditIndividual:
 
 @dataclass
 class Credits:
-    """List of individuals who should be credited for the vulnerability
+    """list of individuals who should be credited for the vulnerability
 
     Attributes:
-        individuals: List of individuals
+        individuals: list of individuals
     """
 
-    individuals: List[CreditIndividual]
+    individuals: list[CreditIndividual]
 
 
 @dataclass
@@ -123,17 +123,17 @@ class Vulnerability:
     """
 
     id: str
-    sources: List[Source]
-    references: List[Reference]
-    ratings: List[Rating]
-    cwes: List[int]
+    sources: list[Source]
+    references: list[Reference]
+    ratings: list[Rating]
+    cwes: list[int]
     description: str
-    advisories: List[Advisory]
+    advisories: list[Advisory]
     created: str
     published: str
     updated: str
     analysis: AnalysisReport
-    affects: List[Affects]
+    affects: list[Affects]
     credits: Optional[Credits] = None
     detail: Optional[str] = ""
     recommendation: Optional[str] = ""
@@ -153,7 +153,7 @@ class VexDocument:
     bomformat: str = "CycloneDX"
     specVersion: str = "1.4"
     version: int = 1
-    vulnerabilities: List[Vulnerability] = field(default_factory=list)
+    vulnerabilities: list[Vulnerability] = field(default_factory=list)
 
 
 @dataclass
