@@ -5,7 +5,9 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List
+from typing import List
+
+from graph import Call
 
 
 class AnalysisState(str, Enum):
@@ -55,8 +57,8 @@ class ArtifactReachability:
     """
 
     reachable: bool
-    reachable_paths: List[List[Dict[str, Any]]]
-    unreachable_paths: List[List[Dict[str, Any]]]
+    reachable_paths: List[List[Call]]
+    unreachable_paths: List[List[Call]]
 
 
 @dataclass

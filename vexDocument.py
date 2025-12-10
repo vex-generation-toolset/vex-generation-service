@@ -167,3 +167,6 @@ class PackageToVex:
 
     purl: str
     vex: VexDocument
+
+    def to_json(self):
+        return {"purl": self.purl, "vex": self.vex}
