@@ -5,10 +5,9 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import List
 
 from function import Function
-from graph import Call
+from graph import Call, Graph
 from utils import CustomEncoder, Package, load_graph, name
 from vexDocument import PackageToVex
 from vexGenerator import VexGenerator
@@ -20,13 +19,12 @@ class Analysis:
 
         Args:
             input: input file path
-            output: output file path
         """
         self.cve_id: str = ""
         self.purl: str = ""
-        self.root_cause_functions: List[str] = []
-        self.identified_root_cause_functions: List[Function] = []
-        self.chains: List[List[Package]] = []
+        self.root_cause_functions: list[str]
+        self.identified_root_cause_functions: list[Function]
+        self.chains: list[list[Package]]
         self.vex = {}
 
         self.setup()
@@ -74,33 +72,36 @@ class Analysis:
         with open(input, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self.cve_id = data.get("cve_id")
-        self.purl = data.get("purl")
-        self.root_cause_functions = data.get("root_cause_functions")
-        chains = data.get("chains")
+        self.cve_id = data.get("cve_id", "")
+        self.purl = data.get("purl", "")
+        self.root_cause_functions = data.get("root_cause_functions", ())
+        chains = data.get("chains", [])
         self.chains = [[get_package(pkg) for pkg in chain] for chain in chains]
         self.vex = data.get("vex")
 
-    def analyze(self, chain: List[Package]):
+    def analyze(self, chain: list[Package]):
         """Run a reachability analysis on a dependency chain
 
         Args:
-            chain: List of packages in a dependency chain maintaining dependency order
+            chain: list of packages in a dependency chain maintaining dependency order
         """
 
         def merge_call_chains(
-            call_chains_a: List[List[Call]], call_chains_b: List[List[Call]]
-        ) -> List[List[Call]]:
+            graph_a: Graph,
+            call_chains_a: list[list[Call]],
+            call_chains_b: list[list[Call]],
+        ) -> list[list[Call]]:
             """Merge call chains from one callgraph with call chains of another callgraph
 
             Args:
+                graph_a: callgraph A
                 call_chain_a: call chains of callgraph A
                 call_chain_b: call chains of callgraph B
 
             Returns:
                 Merged call chains
             """
-            merged_call_chains: List[List[Call]] = []
+            merged_call_chains: list[list[Call]] = []
 
             for call_chain_a in call_chains_a:
                 if len(call_chain_a) < 1:
@@ -121,15 +122,19 @@ class Analysis:
                     call_chain_a_is_merged = False
                     if len(call_chain_b) < 1:
                         add_call_chain_a_once = True
-                        continue
+                        break
 
                     last_call_b = call_chain_b[-1]
-                    if last_call_a.calleeName == last_call_b.calleeName:
+                    if last_call_a.callee == graph_a.get_best_candidate(
+                        last_call_b.calleeName
+                    ):
                         add_call_chain_a_once = True
-                        continue
+                        break
 
                     for i, call in enumerate(call_chain_b):
-                        if last_call_a.calleeName == call.callerName:
+                        if last_call_a.callee == graph_a.get_best_candidate(
+                            call.callerName
+                        ):
                             merged_call_chains.append(call_chain_a + call_chain_b[i:])
                             call_chain_a_is_merged = True
                             break
@@ -225,7 +230,7 @@ class Analysis:
             pkg.reachable = True
 
             merged_call_chains = merge_call_chains(
-                affected_call_chains, merged_call_chains
+                candidate, affected_call_chains, merged_call_chains
             )
 
             print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
@@ -244,7 +249,7 @@ class Analysis:
         Args:
             output: path to output file
         """
-        vex_chains: List[List[PackageToVex]] = []
+        vex_chains: list[list[PackageToVex]] = []
         print("[+] populating VEX document")
         for chain in self.chains:
             generator = VexGenerator(

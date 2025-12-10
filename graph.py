@@ -6,12 +6,12 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 
 from function import Function
 
 
-@dataclass
+@dataclass(frozen=True)
 class Site:
     """A function call site
 
@@ -28,7 +28,7 @@ class Site:
     directory: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Call:
     """A function call
 
@@ -52,7 +52,7 @@ class Call:
         }
 
 
-@dataclass
+@dataclass(frozen=True)
 class Package:
     """A package
 
@@ -71,7 +71,7 @@ class Package:
     isStandardLibrary: bool
 
 
-@dataclass
+@dataclass(frozen=True)
 class Module:
     """A module
 
@@ -91,10 +91,10 @@ class Graph:
 
     Attributes:
         language: Language of the packages
-        functions: List of functions
-        calls: List of calls
-        packages: List of packages
-        modules: List of modules
+        functions: list of functions
+        calls: list of calls
+        packages: list of packages
+        modules: list of modules
         callers: Callee to callers memo for faster access
     """
 
@@ -105,12 +105,13 @@ class Graph:
             filename: Path to the call graph json
         """
         self.language: str
-        self.functions: List[Function]
-        self.calls: List[Call]
-        self.packages: List[Package]
-        self.modules: List[Module]
-        self.callers: Dict[int, List[int]] = defaultdict(list)
+        self.functions: list[Function]
+        self.calls: list[Call]
+        self.packages: list[Package]
+        self.modules: list[Module]
+        self.callers: Dict[int, list[int]] = defaultdict(list)
         self.call_map: Dict[tuple[int, int], int] = {}
+        self.best_candidate: Dict[str, int | None] = {}
 
         self.load(filename)
 
@@ -120,21 +121,6 @@ class Graph:
         Args:
             filename: Path to the call graph json
         """
-
-        def embed_package(f) -> Function:
-            """Embed package name inside function object
-
-            Args:
-                f (dict[str, Any]): function json object
-
-            Returns:
-                Function object with embeded package name
-            """
-            pkg_idx = f.get("packageIndex")
-            return Function(
-                package=self.packages[pkg_idx].path if pkg_idx != -1 else "",
-                **f,
-            )
 
         def embed_function(c) -> Call:
             """Embed function names
@@ -166,7 +152,7 @@ class Graph:
         self.packages = [Package(**p) for p in packages]
 
         functions = data.get("functions")
-        self.functions = [embed_package(f) for f in functions]
+        self.functions = [Function(**f) for f in functions]
 
         calls = data.get("calls")
         self.calls = [embed_function(c) for c in calls]
@@ -176,7 +162,7 @@ class Graph:
             self.call_map[(call.caller, call.callee)] = i
         f.close()
 
-    def find_sinks(self, functions: List[str] | List[Function]) -> List[int]:
+    def find_sinks(self, functions: list[str] | list[Function]) -> list[int]:
         """Find sinks from functions
 
         Args:
@@ -185,37 +171,137 @@ class Graph:
         Returns:
             Unique list of function indices
         """
-        return list(set([i for i, f in enumerate(self.functions) if f in functions]))
 
-    def get_functions(self, indices: List[int]):
+        sinks: list[int] = []
+        for function in functions:
+            best_candidate = self.get_best_candidate(function)
+            if best_candidate is not None:
+                sinks.append(best_candidate)
+
+        return sinks
+
+    def get_best_candidate(self, function: str | Function) -> int | None:
+        """Get the best candidate for a function name or object
+
+        Args:
+            function: Function name or object
+        """
+
+        def score_candidate(
+            candidate: Function, param_types: list[str], is_variadic: bool
+        ) -> int:
+            """Score a candidate based on how many parameters match
+
+            Args:
+                candidate: Candidate function index
+                param_types: list of parameter types
+                is_variadic: Is the function variadic
+
+            Returns:
+                Score of the candidate
+            """
+            candidate_param_types = candidate.parameterTypes
+            if not candidate.is_variadic() and len(candidate_param_types) != len(
+                param_types
+            ):
+                return -1
+
+            score = 0
+            if candidate.is_variadic() and is_variadic:
+                score += 2
+            elif candidate.is_variadic() and not is_variadic:
+                score += 1
+            elif not candidate.is_variadic() and is_variadic:
+                score -= 1
+
+            for i, param_type in enumerate(param_types):
+                if i < len(candidate_param_types):
+                    candidate_param_type = candidate_param_types[i]
+                    if candidate_param_type == param_type:
+                        score += 2
+                    if candidate_param_type.startswith(param_type):
+                        score += 1
+                    if candidate_param_type.endswith(param_type):
+                        score += 1
+                    # allow "Object" to match any type
+                    if candidate_param_type == "Object":
+                        score += 1
+                    # allow type erasure
+                    if candidate_param_type.startswith(
+                        param_type[: param_type.find("<")]
+                    ):
+                        score += 1
+                    # handle variadic functions
+                    if candidate_param_type.startswith(
+                        param_type[: param_type.find("...")]
+                    ):
+                        score += 1
+            return score
+
+        match function:
+            case str():
+                function = function.strip(" ")
+            case Function():
+                function = function.name.strip(" ")
+
+        if function in self.best_candidate:
+            return self.best_candidate[function]
+
+        name = function[: function.find("(")]
+        param_types = (
+            function[function.find("(") + 1 : function.find(")")].split(",")
+            if function.find("(") != -1 and function.find(")") != -1
+            else []
+        )
+        is_variadic = param_types[-1].endswith("...") if len(param_types) > 0 else False
+        candidates: list[int] = [
+            i for i, f in enumerate(self.functions) if f.name.startswith(name)
+        ]
+
+        best_score = -1
+        best_candidate = None
+        for c in candidates:
+            candidate = self.functions[c]
+            if candidate.name == function:
+                self.best_candidate[function] = c
+                return c
+            score = score_candidate(candidate, param_types, is_variadic)
+            if score > best_score:
+                best_score = score
+                best_candidate = c
+
+        self.best_candidate[function] = best_candidate
+        return best_candidate
+
+    def get_functions(self, indices: list[int]) -> list[Function]:
         """Get a lisf of functions from their indices
 
         Args:
-            indices: List of indices
+            indices: list of indices
 
         Returns:
-            List of functions
+            list of functions
         """
         return [self.functions[i] for i in indices]
 
-    def get_other_functions(self, indices: List[int]):
+    def get_other_functions(self, indices: list[int]) -> list[Function]:
         """Get a lisf of functions not in the indices
 
         Args:
-            indices: List of indices
+            indices: list of indices
 
         Returns:
-            List of other functions
+            list of other functions
         """
         return [
-            self.functions[i]
-            for i in range(len(self.functions))
-            if i not in indices and self.functions[i].package != ""
+            f
+            for i, f in enumerate(self.functions)
+            if i not in indices and f.packageIndex != -1
         ]
 
     def find_call_chains(
-        self, sinks: List[int], max_call_chains: int = 0
-    ) -> tuple[List[int], List[List[int]]]:
+        self, sinks: list[int], max_call_chains: int = 0
+    ) -> tuple[list[int], list[list[int]]]:
         """Find call chains to sinks
 
         Args:
@@ -226,9 +312,9 @@ class Graph:
             affected functions indices, call chains
         """
         visited: Dict[int, bool] = {}
-        chains: List[List[int]] = []
+        chains: list[list[int]] = []
 
-        def dfs(sink: int) -> List[List[int]]:
+        def dfs(sink: int) -> list[list[int]]:
             """Depth first search from sink to callers
 
             Args:
@@ -242,7 +328,7 @@ class Graph:
             if len(callers) < 1:
                 return [[]]
 
-            all_chains: List[List[int]] = [[]]
+            all_chains: list[list[int]] = [[]]
             for c in callers:
                 if c in visited or self.functions[c].packageIndex == -1:
                     continue

@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import List
 
 from graph import Call, Graph
 
@@ -43,8 +42,8 @@ class Package:
 
     purl: str
     callgraph: str
-    reachable_paths: List[List[Call]] = field(default_factory=list)
-    unreachable_paths: List[List[Call]] = field(default_factory=list)
+    reachable_paths: list[list[Call]] = field(default_factory=list)
+    unreachable_paths: list[list[Call]] = field(default_factory=list)
     reachable: bool = False
 
 
