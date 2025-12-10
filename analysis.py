@@ -4,13 +4,12 @@
 
 import json
 import subprocess
-from dataclasses import asdict
 from pathlib import Path
 from typing import List
 
 from function import Function
 from graph import Call
-from utils import Package, load_graph, name
+from utils import CustomEncoder, Package, load_graph, name
 from vexDocument import PackageToVex
 from vexGenerator import VexGenerator
 
@@ -26,6 +25,7 @@ class Analysis:
         self.cve_id: str = ""
         self.purl: str = ""
         self.root_cause_functions: List[str] = []
+        self.identified_root_cause_functions: List[Function] = []
         self.chains: List[List[Package]] = []
         self.vex = {}
 
@@ -88,29 +88,6 @@ class Analysis:
             chain: List of packages in a dependency chain maintaining dependency order
         """
 
-        def merge_paths(
-            paths_a: List[List[Function]], paths_b: List[List[Function]]
-        ) -> List[List[Function]]:
-            """Merge paths from one callgraph with paths of another callgraph
-
-            Args:
-                paths_a: paths of callgraph A
-                paths_b: paths of callgraph B
-
-            Returns:
-                Merged paths
-            """
-            merged_paths: List[List[Function]] = []
-            for path_a in paths_a:
-                last_func = path_a[-1]
-
-                for path_b in paths_b:
-                    if last_func in path_b:
-                        func_idx = path_b.index(last_func)
-                        merged_paths.append(path_a[:-1] + path_b[func_idx:])
-
-            return merged_paths
-
         def merge_call_chains(
             call_chains_a: List[List[Call]], call_chains_b: List[List[Call]]
         ) -> List[List[Call]]:
@@ -124,6 +101,7 @@ class Analysis:
                 Merged call chains
             """
             merged_call_chains: List[List[Call]] = []
+
             for call_chain_a in call_chains_a:
                 if len(call_chain_a) < 1:
                     continue
@@ -131,7 +109,6 @@ class Analysis:
 
                 add_call_chain_a_once = False
                 for call_chain_b in call_chains_b:
-                    last_call_b = call_chain_b[-1]
                     # Here, we handle 2 specific scenarios:
                     # 1. assume call_chain_b = []
                     # this can happen if the affected functions are not being called inside
@@ -141,75 +118,58 @@ class Analysis:
                     # in that case, last_call_a.calleeName == last_call_b.calleeName
                     #
                     # In both of these cases, call_chain_a should be added to the merged_call_chains once
-                    if (
-                        len(call_chain_b) < 1
-                        or last_call_a.calleeName == last_call_b.calleeName
-                    ):
+                    call_chain_a_is_merged = False
+                    if len(call_chain_b) < 1:
                         add_call_chain_a_once = True
                         continue
 
-                    first_call_to_last_callee = next(
-                        (
-                            i
-                            for i, call in enumerate(call_chain_b)
-                            if last_call_a.calleeName == call.callerName
-                        ),
-                        None,
-                    )
-                    if first_call_to_last_callee is not None:
-                        merged_call_chains.append(
-                            call_chain_a[:-1] + call_chain_b[first_call_to_last_callee:]
-                        )
+                    last_call_b = call_chain_b[-1]
+                    if last_call_a.calleeName == last_call_b.calleeName:
+                        add_call_chain_a_once = True
+                        continue
+
+                    for i, call in enumerate(call_chain_b):
+                        if last_call_a.calleeName == call.callerName:
+                            merged_call_chains.append(call_chain_a + call_chain_b[i:])
+                            call_chain_a_is_merged = True
+                            break
+
+                    if call_chain_a_is_merged:
+                        break
 
                 if add_call_chain_a_once:
                     merged_call_chains.append(call_chain_a)
 
             return merged_call_chains
 
-        def get_unique_funcs(indices: List[int]) -> List[int]:
-            """Get unique function indices from a list of paths
-
-            Args:
-                paths: List of paths
-
-            Returns:
-                Unique list of function indices
-            """
-            return list(set(indices))
-
-        merged_paths: List[List[Function]] = []
-
         pkg = chain[-1]
         print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
         print(f"[+] loading callgraph for {name(pkg.purl)} from {pkg.callgraph}")
         affected = load_graph(pkg.callgraph)
         print(f"[+] found {len(affected.functions)} functions in the callgraph")
+        print(f"[+] found {len(affected.calls)} function calls in the callgraph")
         print("[+] identifying the root cause functions in the callgraph")
         sinks = affected.find_sinks(self.root_cause_functions)
-        print(f"[+] identified {len(sinks)} sink(s)")
+        self.identified_root_cause_functions = affected.get_functions(sinks)
+        print(f"[+] identified {len(sinks)} sinks")
         print("[+] finding call chains to the identified sinks")
-        affected_paths = affected.find_paths(sinks)
-        unique_function_indices = get_unique_funcs(
-            [func for path in affected_paths for func in path]
+        unique_function_indices, affected_call_chains = affected.find_call_chains(sinks)
+        print(f"[+] found {len(affected_call_chains)} affected call chains")
+        print(
+            f"[+] found {len(unique_function_indices)} unique functions in the affected call chains"
         )
 
-        unique_funcs_in_affected_paths = affected.get_functions(unique_function_indices)
-        unique_funcs_not_in_affected_path = affected.get_other_functions(
+        unique_reachable_functions = affected.get_functions(unique_function_indices)
+        unique_unreachable_functions = affected.get_other_functions(
             unique_function_indices
         )
 
         chain[-1].reachable = True
-        merged_paths = [
-            affected.get_functions(path_indices) for path_indices in affected_paths
-        ]
         merged_call_chains = [
-            affected.find_call_chain(affected_path) for affected_path in affected_paths
+            [affected.calls[call] for call in call_chain]
+            for call_chain in affected_call_chains
+            if len(call_chain) > 0
         ]
-
-        print(f"[+] found {len(merged_call_chains)} call chain(s) to the sinks")
-        print(
-            f"[+] found {len(unique_funcs_in_affected_paths)} unique function(s) in the call chains"
-        )
         chain[-1].reachable_paths = merged_call_chains
 
         for pkg in chain[-2::-1]:
@@ -217,64 +177,57 @@ class Analysis:
             print(f"[+] loading callgraph for {name(pkg.purl)} from {pkg.callgraph}")
             candidate = load_graph(pkg.callgraph)
             print(f"[+] found {len(candidate.functions)} functions in the callgraph")
-            print(
-                "[+] identifying unique functions in the affected call chains in the callgraph"
-            )
-            sinks = candidate.find_sinks(unique_funcs_in_affected_paths)
-            print(f"[+] identified {len(sinks)} sink(s)")
+            print(f"[+] found {len(candidate.calls)} function calls in the callgraph")
+            print("[+] identifying affected functions in the callgraph")
+            sinks = candidate.find_sinks(unique_reachable_functions)
+            print(f"[+] identified {len(sinks)} sinks")
             print("[+] finding call chains to the identified sinks")
-            affected_paths = candidate.find_paths(sinks)
+            unique_function_indices, _affected_call_chains = candidate.find_call_chains(
+                sinks
+            )
             affected_call_chains = [
-                candidate.find_call_chain(affected_path)
-                for affected_path in affected_paths
+                [candidate.calls[call] for call in call_chain]
+                for call_chain in _affected_call_chains
+                if len(call_chain) > 0
             ]
-            unique_function_indices = get_unique_funcs(
-                [func for path in affected_paths for func in path]
+            print(f"[+] found {len(affected_call_chains)} affected call chains")
+            print(
+                f"[+] found {len(unique_function_indices)} unique function in the affected call chains"
             )
 
             if len(unique_function_indices) == 0:
                 pkg.reachable = False
                 print("[+] did not find any call chain to the identified sinks")
                 print(f"[+] {name(pkg.purl)} is not affected by {self.cve_id}")
+                print("[+] identifying unreachable functions in the callgraph")
+                sinks = candidate.find_sinks(unique_unreachable_functions)
                 print(
-                    "[+] identifying unique functions not in the affected call chains in the callgraph"
-                )
-                sinks = candidate.find_sinks(unique_funcs_not_in_affected_path)
-                print(
-                    f"[+] identified {len(sinks)} sink(s) from {len(unique_funcs_not_in_affected_path)} unique function(s)"
+                    f"[+] identified {len(sinks)} sinks from {len(unique_unreachable_functions)} unique functions"
                 )
                 print("[+] finding call chains to the identified sinks")
-                unreachable_paths = candidate.find_paths(sinks, 10)
-                unreachable_call_chains = [
-                    candidate.find_call_chain(unreachable_path)
-                    for unreachable_path in unreachable_paths
-                ]
+                _, unreachable_call_chains = candidate.find_call_chains(sinks)
                 print(
-                    f"[+] found {len(unreachable_call_chains)} call chain(s) to the sinks"
+                    f"[+] found {len(unreachable_call_chains)} call chains to the sinks"
                 )
-                pkg.unreachable_paths = unreachable_call_chains
+                pkg.unreachable_paths = [
+                    [candidate.calls[call] for call in call_chain]
+                    for call_chain in unreachable_call_chains
+                    if len(call_chain) > 0
+                ]
                 break
 
-            unique_funcs_in_affected_paths = candidate.get_functions(
+            unique_reachable_functions = candidate.get_functions(
                 unique_function_indices
             )
-            unique_funcs_not_in_affected_path = affected.get_other_functions(
+            unique_unreachable_functions = candidate.get_other_functions(
                 unique_function_indices
             )
             pkg.reachable = True
-            affected_function_paths = [
-                candidate.get_functions(path_indices) for path_indices in affected_paths
-            ]
-            merged_paths = merge_paths(affected_function_paths, merged_paths)
 
             merged_call_chains = merge_call_chains(
                 affected_call_chains, merged_call_chains
             )
 
-            print(f"[+] found {len(merged_call_chains)} call chain(s) to the sinks")
-            print(
-                f"[+] found {len(unique_funcs_in_affected_paths)} unique function(s) in the call chains"
-            )
             print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
             pkg.reachable_paths = merged_call_chains
 
@@ -283,6 +236,7 @@ class Analysis:
         for i, chain in enumerate(self.chains):
             self.analyze(chain)
             print(f"[+] analysis complete for chain index {i}")
+        load_graph.cache_clear()
 
     def export_vex(self, output: str | Path):
         """Export the analysis vex reports
@@ -290,14 +244,15 @@ class Analysis:
         Args:
             output: path to output file
         """
-        print("[+] populting VEX document")
         vex_chains: List[List[PackageToVex]] = []
+        print("[+] populating VEX document")
         for chain in self.chains:
             generator = VexGenerator(
                 cve_id=self.cve_id,
                 vex_helper=self.vex,
                 chain=chain,
                 root_cause_functions=self.root_cause_functions,
+                identified_root_cause_functions=self.identified_root_cause_functions,
                 purl=self.purl,
             )
             vex_chain = generator.populate_list_of_vex()
@@ -312,8 +267,9 @@ class Analysis:
                 print("=" * 120)
         print("[+] writing VEX document")
         json.dump(
-            [[asdict(vex) for vex in vex_chain] for vex_chain in vex_chains],
+            [[vex for vex in vex_chain] for vex_chain in vex_chains],
             open(output, "w"),
+            cls=CustomEncoder,
             indent=2,
         )
         print("[+] finished writing VEX document")

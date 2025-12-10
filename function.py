@@ -21,21 +21,18 @@ class Function:
         language: Language
         type: Function type
         properties: Function properties
-        visited: Did we visit this function node when traversing the graph?
     """
 
     # fields in camelCase as they are in the callgraph json
-    parameterTypes: List
-    templateArguments: List
+    parameterTypes: List[str]
+    templateArguments: List[str]
     function: str
     name: str
     package: str
     packageIndex: int
     language: str
     type: str
-    properties: List
-
-    visited: bool = False
+    properties: List[str]
 
     def __eq__(self, other) -> bool:
         """Custom function similarity check
@@ -56,13 +53,22 @@ class Function:
             Returns:
                 True if the functions match, False otherwise
             """
+            other = other.replace(" ", "")
             match self.language:
                 # build a dynamic pattern using regular expression in the canonical format from the functino object
                 case "java":
+                    if self.name.replace(" ", "") == other:
+                        return True
+
                     pattern = rf"{
                         '' if self.package == '' else re.escape(self.package + '.')
                     }{re.escape(self.type)}[.#]{self.function}\({
-                        ', *'.join([re.escape(p) for p in self.parameterTypes])
+                        ','.join(
+                            [
+                                re.escape(p[: p.find('<')] + '(<.*>)?')
+                                for p in self.parameterTypes
+                            ]
+                        )
                     }\)"
 
                 case _:

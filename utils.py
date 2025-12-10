@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import List
 from graph import Call, Graph
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=16)
 def load_graph(filename: str | Path) -> Graph:
     """Load the graph from the file
     We are using lru cache to cache the graph object
@@ -45,3 +46,16 @@ class Package:
     reachable_paths: List[List[Call]] = field(default_factory=list)
     unreachable_paths: List[List[Call]] = field(default_factory=list)
     reachable: bool = False
+
+
+class CustomEncoder(json.JSONEncoder):
+    """A custom json encoder that uses `to_json` attribute of objects"""
+
+    def default(self, o):
+        # If object has a custom JSON representation, use it
+        if hasattr(o, "to_json"):
+            return o.to_json()
+        # Let dataclasses serialize naturally (their __dict__)
+        if hasattr(o, "__dict__"):
+            return o.__dict__
+        return super().default(o)

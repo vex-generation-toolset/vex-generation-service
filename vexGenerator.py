@@ -17,7 +17,8 @@ from analysisReport import (
     Justification,
     Response,
 )
-from utils import Package, load_graph, name
+from function import Function
+from utils import Package, name
 from vexDocument import (
     Advisory,
     Affects,
@@ -41,11 +42,11 @@ class VexGenerator:
     relevant package.
 
     Attributes:
-        vex_helper : partially filled vex document created by rcs
         cve_id: cve id
+        vex_helper : partially filled vex document created by rcs
         chain: ordered list of packages in the dependency chain
-        vulnerable_methods: vulnerable methods found by rcs
-        upstream_package: the upstream package that hosts the vulnerable methods
+        root_cause_functions: vulnerable methods found by rcs
+        affected: the upstream package that harbors the root cause functions
     """
 
     def __init__(
@@ -54,6 +55,7 @@ class VexGenerator:
         vex_helper,
         chain: List[Package],
         root_cause_functions: List[str],
+        identified_root_cause_functions: List[Function],
         purl: str,
     ):
         """initialize the vex generator"""
@@ -62,11 +64,12 @@ class VexGenerator:
         self.vex_helper = vex_helper
         self.chain: List[Package] = chain
         self.root_cause_functions: List[str] = root_cause_functions
-        self.purl: str = purl
+        self.identified_root_cause_functions: List[Function] = (
+            identified_root_cause_functions
+        )
+        self.affected: str = purl
 
-    def populate_detail_for_each_package(
-        self, package_idx: int
-    ) -> Tuple[str, AnalysisDetail]:
+    def get_detail(self, pkg_idx: int) -> Tuple[str, AnalysisDetail]:
         """Generates detail field for each of the package in chain
 
         Args:
@@ -75,42 +78,24 @@ class VexGenerator:
         Returns:
             Verdict and Analysiss detail
         """
-        package = self.chain[package_idx]
-        explanation = self.populate_explanation_for_single_hop(package_idx)
+        pkg = self.chain[pkg_idx]
+        explanation = self.get_explanation(pkg_idx)
         verdict = explanation.verdict
         return verdict, AnalysisDetail(
             explanations=[explanation],
-            root_cause_methods=self.root_cause_functions,
+            root_cause_methods=[f.name for f in self.identified_root_cause_functions],
             reachability_trace=ArtifactReachability(
-                reachable=package.reachable,
-                reachable_paths=[
-                    [
-                        {
-                            "caller": c.callerName,
-                            "callee": c.calleeName,
-                            "callSite": c.callSite,
-                        }
-                        for c in call_chain
-                    ]
-                    for call_chain in package.reachable_paths
-                    if len(call_chain) > 0
-                ],
-                unreachable_paths=[
-                    [
-                        {
-                            "caller": c.callerName,
-                            "callee": c.calleeName,
-                            "callSite": c.callSite,
-                        }
-                        for c in call_chain
-                    ]
-                    for call_chain in package.unreachable_paths
-                    if len(call_chain) > 0
-                ],
+                reachable=pkg.reachable,
+                reachable_paths=pkg.reachable_paths
+                if pkg_idx < len(self.chain) - 1
+                else [],
+                unreachable_paths=pkg.unreachable_paths
+                if pkg_idx < len(self.chain) - 1
+                else [],
             ),
         )
 
-    def populate_explanation_for_single_hop(self, package_idx: int) -> Explanation:
+    def get_explanation(self, package_idx: int) -> Explanation:
         """Generates an explanation object given the reachability trace field of an artifact
 
         Args:
@@ -122,13 +107,13 @@ class VexGenerator:
         package = self.chain[package_idx]
         verdict = "update" if package.reachable is True else "will not fix"
         author = "VGS"
-        message = self.populate_message(package_idx)
+        message = self.get_message(package_idx)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return Explanation(
             verdict=verdict, message=message, author=author, timestamp=timestamp
         )
 
-    def populate_message(self, pkg_idx: int) -> str:
+    def get_message(self, pkg_idx: int) -> str:
         """Populate an intuitive message based on the reachable and unreachable paths
 
         Args:
@@ -142,17 +127,14 @@ class VexGenerator:
         if pkg_idx == len(self.chain) - 1:
             return f"{name(pkg.purl)} harbors the vulnerability {self.cve_id}.\n"
 
-        reachable = pkg.reachable
+        is_reachable = pkg.reachable
 
         affected_pkg = self.chain[-1]
-        affected = load_graph(self.chain[-1].callgraph)
-        affected_functions = affected.get_functions(
-            affected.find_sinks(self.root_cause_functions)
-        )
-        affected_function_names = [func.name for func in affected_functions]
-        affected_list = "\n - ".join(affected_function_names)
+        affected_functions = self.identified_root_cause_functions
+        affected_function_names = [f.name for f in affected_functions]
+        affected_function_list = "\n - ".join(affected_function_names)
 
-        msg = f"{self.cve_id}, reported in {name(affected_pkg.purl)}, {'directly impacts' if reachable else 'does not impact'} {name(pkg.purl)}.\n"
+        msg = f"{self.cve_id}, reported in {name(affected_pkg.purl)}, {'directly impacts' if is_reachable else 'does not impact'} {name(pkg.purl)}.\n"
         msg += f"\nThe dependency chain from {name(pkg.purl)} to {name(affected_pkg.purl)} is shown here (──> means depends on):\n"
         msg += (
             "\n"
@@ -169,89 +151,68 @@ class VexGenerator:
             )
         else:
             msg += f"\nThe root cause functions in {name(affected_pkg.purl)} are:\n"
-            msg += f"\n - {affected_list}\n"
+            msg += f"\n - {affected_function_list}\n"
+
         # TODO:
         # Once we get the root cause explanations, we will be able to show rationale
         # behind each root cause found using llm summary
         # msg += "\nWe identified the root causes in the following way:\n"
         # msg += f"{self.root_cause_rationale}"
 
-        if reachable:
+        if is_reachable and len(pkg.reachable_paths) > 0:
             # Case 1: The bug is reachable from this downstream package
-            reachable_paths = [
-                [call.callerName for call in call_chain] + [call_chain[-1].calleeName]
-                for call_chain in pkg.reachable_paths
-                if len(call_chain) > 0
+            call_chain = pkg.reachable_paths[0]
+            reachable_path = [call.callerName for call in call_chain] + [
+                call_chain[-1].calleeName
             ]
-            formatted_paths: List[str] = []
-            for path in reachable_paths:
-                formatted_path = "\n└─>".join(path)
-                formatted_paths.append(formatted_path)
 
-            if len(formatted_paths) > 0:
-                msg += f"\nHere is a call chain that shows how a root cause function is called from {name(pkg.purl)}\n"
-                msg += f"\n{formatted_paths[0]}\n"
-                msg += f"\nThere are {len(formatted_paths) - 1} other traces in which at least one root cause function is called from {name(pkg.purl)}\n"
+            formatted_path = "\n└─>".join(reachable_path)
+            msg += f"\nHere is a call chain that shows how a root cause function is called from {name(pkg.purl)}\n"
+            msg += f"\n{formatted_path}\n"
+            msg += f"\nThere are {len(pkg.reachable_paths) - 1} other traces in which at least one root cause function is called from {name(pkg.purl)}\n"
 
         else:
             # Case 2: The bug is unreachable from the first downstream package
-            if pkg_idx == len(self.chain) - 2:
-                unreachable_paths = [
-                    [call.callerName for call in call_chain]
-                    + [call_chain[-1].calleeName]
-                    for call_chain in pkg.unreachable_paths
-                    if len(call_chain) > 0
+            if pkg_idx == len(self.chain) - 2 and len(pkg.unreachable_paths) > 0:
+                call_chain = pkg.unreachable_paths[0]
+                unreachable_path = [call.callerName for call in call_chain] + [
+                    call_chain[-1].calleeName
                 ]
-                formatted_paths: List[str] = []
-                for path in unreachable_paths:
-                    formatted_path = "\n└─>".join(path)
-                    formatted_paths.append(formatted_path)
 
-                if len(formatted_paths) > 0:
-                    msg += f"\nThe first downstream package, {name(pkg.purl)}, has {len(unreachable_paths)} calls to different methods in {name(affected_pkg.purl)}, but none of them calls any of the root cause functions. Here is an example call chain:\n"
-                    msg += f"\n{formatted_paths[0]}\n"
-                    msg += f"\nSince the root cause functions are not reachable at {name(pkg.purl)}, the packages further downstream are not affected.\n"
-                    msg += f"\n{name(pkg.purl)} does not need an update\n"
+                formatted_path = "\n└─>".join(unreachable_path)
+                msg += f"\nThe first downstream package, {name(pkg.purl)}, has {len(pkg.unreachable_paths)} calls to different methods in {name(affected_pkg.purl)}, but none of them calls any of the root cause functions. Here is an example call chain:\n"
+                msg += f"\n{formatted_path}\n"
+                msg += f"\nSince the root cause functions are not reachable at {name(pkg.purl)}, the packages further downstream are not affected.\n"
+                msg += f"\n{name(pkg.purl)} does not need an update\n"
             else:
                 # Case 3: The bug is unreachable from other downstream package
                 for i in range(len(self.chain) - 2, pkg_idx - 1, -1):
-                    downstream_package = self.chain[i]
-                    if downstream_package.reachable:
-                        reachable_paths = [
-                            [call.callerName for call in call_chain]
-                            + [call_chain[-1].calleeName]
-                            for call_chain in downstream_package.reachable_paths
-                            if len(call_chain) > 0
+                    down_pkg = self.chain[i]
+                    if down_pkg.reachable and len(down_pkg.reachable_paths) > 0:
+                        call_chain = down_pkg.reachable_paths[0]
+                        reachable_path = [call.callerName for call in call_chain] + [
+                            call_chain[-1].calleeName
                         ]
-                        formatted_paths: List[str] = []
-                        for path in reachable_paths:
-                            formatted_path = "\n└─>".join(path)
-                            formatted_paths.append(formatted_path)
-                        if len(formatted_paths) > 0:
-                            msg += f"\nThe {'first' if i == len(self.chain) - 2 else 'next'} downstream package, {name(downstream_package.purl)}, calls at least one of the vulnerable functions. Here is an example call chain:\n"
-                            msg += f"\n{formatted_paths[0]}\n"
+                        formatted_path = "\n└─>".join(reachable_path)
+                        msg += f"\nThe {'first' if i == len(self.chain) - 2 else 'next'} downstream package, {name(down_pkg.purl)}, calls at least one of the vulnerable functions. Here is an example call chain:\n"
+                        msg += f"\n{formatted_path}\n"
                     else:
-                        unreachable_paths = [
-                            [call.callerName for call in call_chain]
-                            + [call_chain[-1].calleeName]
-                            for call_chain in downstream_package.unreachable_paths
-                            if len(call_chain) > 0
-                        ]
-                        formatted_paths: List[str] = []
-                        for path in unreachable_paths:
-                            formatted_path = "\n└─>".join(path)
-                            formatted_paths.append(formatted_path)
+                        if len(down_pkg.unreachable_paths) > 0:
+                            call_chain = down_pkg.unreachable_paths[0]
+                            unreachable_path = [
+                                call.callerName for call in call_chain
+                            ] + [call_chain[-1].calleeName]
 
-                        if len(formatted_paths) > 0:
-                            msg += f"\nThe next downstream package, {name(downstream_package.purl)}, has {len(unreachable_paths)} calls to different methods in {name(self.chain[i + 1].purl)}, but none of them calls any of the root cause functions. An example is given here.\n"
-                            msg += f"\n{formatted_paths[0]}\n"
-                            msg += f"\nSince the root cause functions are not reachable at {name(downstream_package.purl)}, the packages further downstream are not affected.\n"
+                            formatted_path = "\n└─>".join(unreachable_path)
+                            msg += f"\nThe next downstream package, {name(down_pkg.purl)}, has {len(down_pkg.unreachable_paths)} calls to different methods in {name(self.chain[i + 1].purl)}, but none of them calls any of the root cause functions. An example is given here.\n"
+                            msg += f"\n{formatted_path}\n"
+                            msg += f"\nSince the root cause functions are not reachable at {name(down_pkg.purl)}, the packages further downstream are not affected.\n"
 
-                        msg += f"\n{name(downstream_package.purl)} does not need an update\n"
+                        msg += f"\n{name(down_pkg.purl)} does not need an update\n"
 
         return textwrap.dedent(msg)
 
-    def populate_analysis_report_for_package(self, package_idx: int):
+    def get_analysis_report(self, pkg_idx: int) -> AnalysisReport:
         """Populate "analysis" field for a given package that will be inside the vex
 
         Args:
@@ -260,7 +221,7 @@ class VexGenerator:
             the AnalysisReport object for that particular package or artifact
         """
 
-        verdict, detail = self.populate_detail_for_each_package(package_idx)
+        verdict, detail = self.get_detail(pkg_idx)
         state = (
             AnalysisState.AFFECTED if verdict == "update" else AnalysisState.UNAFFECTED
         )
@@ -305,8 +266,8 @@ class VexGenerator:
         )
         package_to_vex: List[PackageToVex] = []
 
-        for package_idx, package in enumerate(self.chain):
-            analysis = self.populate_analysis_report_for_package(package_idx)
+        for pkg_idx, pkg in enumerate(self.chain):
+            analysis = self.get_analysis_report(pkg_idx)
             vuln = Vulnerability(
                 id=self.cve_id,
                 sources=sources,
@@ -322,8 +283,8 @@ class VexGenerator:
                 updated=updated,
                 credits=credits_obj,
                 analysis=analysis,
-                affects=[Affects(ref=f"pkg:{self.purl}")],
+                affects=[Affects(ref=f"{self.affected}")],
             )
             vex = VexDocument(vulnerabilities=[vuln])
-            package_to_vex.append(PackageToVex(purl=package.purl, vex=vex))
+            package_to_vex.append(PackageToVex(purl=pkg.purl, vex=vex))
         return package_to_vex

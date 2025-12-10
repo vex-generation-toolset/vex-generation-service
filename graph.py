@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 from function import Function
 
@@ -42,6 +43,13 @@ class Call:
     callerName: str
     callee: int
     calleeName: str
+
+    def to_json(self):
+        return {
+            "caller": self.callerName,
+            "callee": self.calleeName,
+            "callSite": self.callSite,
+        }
 
 
 @dataclass
@@ -87,6 +95,7 @@ class Graph:
         calls: List of calls
         packages: List of packages
         modules: List of modules
+        callers: Callee to callers memo for faster access
     """
 
     def __init__(self, filename: str | Path):
@@ -100,6 +109,8 @@ class Graph:
         self.calls: List[Call]
         self.packages: List[Package]
         self.modules: List[Module]
+        self.callers: Dict[int, List[int]] = defaultdict(list)
+        self.call_map: Dict[tuple[int, int], int] = {}
 
         self.load(filename)
 
@@ -160,6 +171,9 @@ class Graph:
         calls = data.get("calls")
         self.calls = [embed_function(c) for c in calls]
 
+        for i, call in enumerate(self.calls):
+            self.callers[call.callee].append(call.caller)
+            self.call_map[(call.caller, call.callee)] = i
         f.close()
 
     def find_sinks(self, functions: List[str] | List[Function]) -> List[int]:
@@ -171,10 +185,6 @@ class Graph:
         Returns:
             Unique list of function indices
         """
-        # TODO: optimize for better efficiency
-        # the time complexity to find sinks is O(n*m). where,
-        # n = the number of functions in the callgraph
-        # m = the number of functions in the query
         return list(set([i for i, f in enumerate(self.functions) if f in functions]))
 
     def get_functions(self, indices: List[int]):
@@ -203,84 +213,53 @@ class Graph:
             if i not in indices and self.functions[i].package != ""
         ]
 
-    def get_calls(self, indices: List[int]) -> List[Call]:
-        """Get a list of calls from their indices
+    def find_call_chains(
+        self, sinks: List[int], max_call_chains: int = 0
+    ) -> tuple[List[int], List[List[int]]]:
+        """Find call chains to sinks
 
         Args:
-            indices: List of indices
+            sinks: indices of sink functions
+            max_paths: maximum call chains to keep. default = 0 means no limit
 
         Returns:
-            List of calls
+            affected functions indices, call chains
         """
-        return [self.calls[i] for i in indices]
+        visited: Dict[int, bool] = {}
+        chains: List[List[int]] = []
 
-    def find_call(self, caller: int, callee: int) -> Call | None:
-        """Find a call given a caller and a callee
+        def dfs(sink: int) -> List[List[int]]:
+            """Depth first search from sink to callers
 
-        Args:
-            caller: Caller index
-            callee: Callee index
+            Args:
+                sink: sink function index
 
-        Returns:
-            The first call by the caller to callee
-        """
-        calls = [
-            call
-            for call in self.calls
-            if call.caller == caller and call.callee == callee
-        ]
-        if len(calls) > 0:
-            return calls[0]
-        else:
-            return None
+            Returns:
+                list of call chains
+            """
+            visited[sink] = True
+            callers = self.callers.get(sink, [])
+            if len(callers) < 1:
+                return [[]]
 
-    def find_call_chain(self, path: List[int]) -> List[Call]:
-        """Find the call chain given a path
+            all_chains: List[List[int]] = [[]]
+            for c in callers:
+                if c in visited or self.functions[c].packageIndex == -1:
+                    continue
+                prefix_call_chains = dfs(c)
+                for call_chain in prefix_call_chains:
+                    all_chains.append(call_chain + [self.call_map[(c, sink)]])
+            return all_chains
 
-        Args:
-            path: The list of function indices in order of traversal
-
-        Returns:
-            An ordered list of calls as a chain
-        """
-        call_chain: List[Call] = []
-        for i in range(len(path) - 1):
-            call = self.find_call(path[i], path[i + 1])
-            if call:
-                call_chain.append(call)
-
-        return call_chain
-
-    def find_paths(self, sinks: List[int], max_paths: int = 0) -> List[List[int]]:
-        """Find all paths to the sinks recursively
-
-        Args:
-            sinks: List of function indices
-            max_paths (optional): Maximum number of paths to return. Default value 0 means no limit.
-
-        Returns:
-            List of paths
-        """
-        paths: List[List[int]] = []
-        for sink in sinks:
-            if self.functions[sink].visited:
-                continue
-            self.functions[sink].visited = True
-            result = [call for call in self.calls if call.callee == sink]
-            callers = [call.caller for call in result]
-            if len(callers) == 0:
-                paths.append([sink])
-                self.functions[sink].visited = False
-                if max_paths > 0 and len(paths) >= max_paths:
-                    break
-                continue
-            paths_to_callers = self.find_paths(callers, max_paths)
-            for path in paths_to_callers:
-                paths.append(path + [sink])
-                if max_paths > 0 and len(paths) >= max_paths:
-                    break
-            if max_paths > 0 and len(paths) >= max_paths:
+        for s in sinks:
+            if max_call_chains > 0 and len(chains) >= max_call_chains:
                 break
-            self.functions[sink].visited = False
-        max_paths = max_paths if max_paths > 0 else len(paths)
-        return paths[:max_paths]
+
+            new_chains = dfs(s)
+            if max_call_chains > 0:
+                needed = max_call_chains - len(chains)
+                chains.extend(new_chains[:needed])
+            else:
+                chains.extend(new_chains)
+
+        return list(visited.keys()), [chain for chain in chains if len(chain) > 0]
