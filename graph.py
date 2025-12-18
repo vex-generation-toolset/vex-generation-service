@@ -5,51 +5,12 @@
 import json
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict
 
 from function import Function
-
-
-@dataclass(frozen=True)
-class Site:
-    """A function call site
-
-    Attributes:
-        filename: file that hosts the call site
-        line: line number
-        column: column number
-        directory: relative directory of the file
-    """
-
-    filename: str
-    line: int
-    column: int
-    directory: str
-
-
-@dataclass(frozen=True)
-class Call:
-    """A function call
-
-    Attributes:
-        callSite: The function call site
-        caller: Caller function index
-        callee: Callee function index
-    """
-
-    callSite: Site
-    caller: int
-    callerName: str
-    callee: int
-    calleeName: str
-
-    def to_json(self):
-        return {
-            "caller": self.callerName,
-            "callee": self.calleeName,
-            "callSite": self.callSite,
-        }
+from utils import Call, is_candidate, score_candidate
 
 
 @dataclass(frozen=True)
@@ -187,75 +148,17 @@ class Graph:
             function: Function name or object
         """
 
-        def score_candidate(
-            candidate: Function, param_types: list[str], is_variadic: bool
-        ) -> int:
-            """Score a candidate based on how many parameters match
-
-            Args:
-                candidate: Candidate function index
-                param_types: list of parameter types
-                is_variadic: Is the function variadic
-
-            Returns:
-                Score of the candidate
-            """
-            candidate_param_types = candidate.parameterTypes
-            if not candidate.is_variadic() and len(candidate_param_types) != len(
-                param_types
-            ):
-                return -1
-
-            score = 0
-            if candidate.is_variadic() and is_variadic:
-                score += 2
-            elif candidate.is_variadic() and not is_variadic:
-                score += 1
-            elif not candidate.is_variadic() and is_variadic:
-                score -= 1
-
-            for i, param_type in enumerate(param_types):
-                if i < len(candidate_param_types):
-                    candidate_param_type = candidate_param_types[i]
-                    if candidate_param_type == param_type:
-                        score += 2
-                    if candidate_param_type.startswith(param_type):
-                        score += 1
-                    if candidate_param_type.endswith(param_type):
-                        score += 1
-                    # allow "Object" to match any type
-                    if candidate_param_type == "Object":
-                        score += 1
-                    # allow type erasure
-                    if candidate_param_type.startswith(
-                        param_type[: param_type.find("<")]
-                    ):
-                        score += 1
-                    # handle variadic functions
-                    if candidate_param_type.startswith(
-                        param_type[: param_type.find("...")]
-                    ):
-                        score += 1
-            return score
-
         match function:
             case str():
-                function = function.strip(" ")
+                function = function.strip(" ").replace("#", ".")
             case Function():
-                function = function.name.strip(" ")
+                function = function.name.strip(" ").replace("#", ".")
 
         if function in self.best_candidate:
             return self.best_candidate[function]
 
-        name = function[: function.find("(")]
-        param_types = (
-            function[function.find("(") + 1 : function.find(")")].split(",")
-            if function.find("(") != -1 and function.find(")") != -1
-            else []
-        )
-        is_variadic = param_types[-1].endswith("...") if len(param_types) > 0 else False
         candidates: list[int] = [
-            i for i, f in enumerate(self.functions) if f.name.startswith(name)
+            i for i, f in enumerate(self.functions) if is_candidate(f.name, function)
         ]
 
         best_score = -1
@@ -265,7 +168,7 @@ class Graph:
             if candidate.name == function:
                 self.best_candidate[function] = c
                 return c
-            score = score_candidate(candidate, param_types, is_variadic)
+            score = score_candidate(candidate, function)
             if score > best_score:
                 best_score = score
                 best_candidate = c
@@ -349,3 +252,17 @@ class Graph:
                 chains.extend(new_chains)
 
         return list(visited.keys()), [chain for chain in chains if len(chain) > 0]
+
+
+@lru_cache(maxsize=16)
+def load_graph(filename: str | Path) -> Graph:
+    """Load the graph from the file
+    We are using lru cache to cache the graph object
+
+    Args:
+        filename: path to callgraph
+
+    Returns:
+        Graph
+    """
+    return Graph(filename=filename)
