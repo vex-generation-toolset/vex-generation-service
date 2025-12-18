@@ -44,15 +44,3 @@ class Function:
                 tuple(self.properties),
             )
         )
-
-    def is_variadic(self) -> bool:
-        """Check if the function is variadic
-
-        Returns:
-            True if the function is variadic, False otherwise
-        """
-        return (
-            self.parameterTypes[-1].endswith("...")
-            if len(self.parameterTypes) > 0
-            else False
-        )

@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from graph import Call
+from utils import Call
 
 
 class AnalysisState(str, Enum):

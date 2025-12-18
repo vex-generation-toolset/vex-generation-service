@@ -7,8 +7,13 @@ import subprocess
 from pathlib import Path
 
 from function import Function
-from graph import Call, Graph
-from utils import CustomEncoder, Package, load_graph, name
+from graph import load_graph
+from utils import (
+    CustomEncoder,
+    Package,
+    merge_call_chains,
+    name,
+)
 from vexDocument import PackageToVex
 from vexGenerator import VexGenerator
 
@@ -19,6 +24,7 @@ class Analysis:
 
         Args:
             input: input file path
+            output: output file path
         """
         self.cve_id: str = ""
         self.purl: str = ""
@@ -74,8 +80,8 @@ class Analysis:
 
         self.cve_id = data.get("cve_id", "")
         self.purl = data.get("purl", "")
-        self.root_cause_functions = data.get("root_cause_functions", ())
-        chains = data.get("chains", [])
+        self.root_cause_functions = data.get("root_cause_functions", [])
+        chains = data.get("chains", [[]])
         self.chains = [[get_package(pkg) for pkg in chain] for chain in chains]
         self.vex = data.get("vex")
 
@@ -85,67 +91,6 @@ class Analysis:
         Args:
             chain: list of packages in a dependency chain maintaining dependency order
         """
-
-        def merge_call_chains(
-            graph_a: Graph,
-            call_chains_a: list[list[Call]],
-            call_chains_b: list[list[Call]],
-        ) -> list[list[Call]]:
-            """Merge call chains from one callgraph with call chains of another callgraph
-
-            Args:
-                graph_a: callgraph A
-                call_chain_a: call chains of callgraph A
-                call_chain_b: call chains of callgraph B
-
-            Returns:
-                Merged call chains
-            """
-            merged_call_chains: list[list[Call]] = []
-
-            for call_chain_a in call_chains_a:
-                if len(call_chain_a) < 1:
-                    continue
-                last_call_a = call_chain_a[-1]
-
-                add_call_chain_a_once = False
-                for call_chain_b in call_chains_b:
-                    # Here, we handle 2 specific scenarios:
-                    # 1. assume call_chain_b = []
-                    # this can happen if the affected functions are not being called inside
-                    # package b by any other function. in that case there will be no call
-                    # chain to the affected functions in graph b
-                    # 2. assume package a directly calls the callee function of the last call of call_chain_b
-                    # in that case, last_call_a.calleeName == last_call_b.calleeName
-                    #
-                    # In both of these cases, call_chain_a should be added to the merged_call_chains once
-                    call_chain_a_is_merged = False
-                    if len(call_chain_b) < 1:
-                        add_call_chain_a_once = True
-                        break
-
-                    last_call_b = call_chain_b[-1]
-                    if last_call_a.callee == graph_a.get_best_candidate(
-                        last_call_b.calleeName
-                    ):
-                        add_call_chain_a_once = True
-                        break
-
-                    for i, call in enumerate(call_chain_b):
-                        if last_call_a.callee == graph_a.get_best_candidate(
-                            call.callerName
-                        ):
-                            merged_call_chains.append(call_chain_a + call_chain_b[i:])
-                            call_chain_a_is_merged = True
-                            break
-
-                    if call_chain_a_is_merged:
-                        break
-
-                if add_call_chain_a_once:
-                    merged_call_chains.append(call_chain_a)
-
-            return merged_call_chains
 
         pkg = chain[-1]
         print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
@@ -230,7 +175,7 @@ class Analysis:
             pkg.reachable = True
 
             merged_call_chains = merge_call_chains(
-                candidate, affected_call_chains, merged_call_chains
+                affected_call_chains, merged_call_chains
             )
 
             print(f"[+] {name(pkg.purl)} is affected by {self.cve_id}")
