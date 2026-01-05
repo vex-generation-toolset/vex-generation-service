@@ -5,7 +5,7 @@
 
 import argparse
 
-from src.vex_generation_service.analysis import Analysis
+from vex_generation_service.analysis import Analysis
 from typing import Sequence
 
 def main(argv: Sequence[str] | None = None) -> int:
