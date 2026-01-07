@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from utils import Call
+from vex_generation_service.utils import Call
 
 
 class AnalysisState(str, Enum):

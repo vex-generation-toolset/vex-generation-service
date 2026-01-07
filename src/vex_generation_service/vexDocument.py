@@ -6,7 +6,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from analysisReport import AnalysisReport
+from vex_generation_service.analysisReport import AnalysisReport
 
 
 @dataclass
