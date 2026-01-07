@@ -4,9 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import argparse
+from typing import Sequence
 
 from vex_generation_service.analysis import Analysis
-from typing import Sequence
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(

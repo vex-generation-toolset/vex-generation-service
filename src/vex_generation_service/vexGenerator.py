@@ -7,7 +7,7 @@ import textwrap
 from dataclasses import dataclass
 from datetime import datetime
 
-from analysisReport import (
+from vex_generation_service.analysisReport import (
     AnalysisDetail,
     AnalysisReport,
     AnalysisState,
@@ -16,9 +16,9 @@ from analysisReport import (
     Justification,
     Response,
 )
-from function import Function
-from utils import Package, name
-from vexDocument import (
+from vex_generation_service.function import Function
+from vex_generation_service.utils import Package, name
+from vex_generation_service.vexDocument import (
     Advisory,
     Affects,
     CreditIndividual,
