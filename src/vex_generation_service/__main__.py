@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from main import main
+import sys
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())
