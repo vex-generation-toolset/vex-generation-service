@@ -1,0 +1,91 @@
+name: Issue Email Notification
+on:
+  issues:
+    types: [opened, edited, closed, reopened, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install pandoc
+        run: sudo apt-get install -y pandoc
+
+      - name: Prepare metadata
+        id: meta
+        run: |
+          ISSUE_BODY=$(jq -r '.issue.body // ""' "$GITHUB_EVENT_PATH")
+          COMMENT_TEXT=$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")
+
+          if [ "${{ github.event_name }}" != "issue_comment" ]; then
+            COMMENT_TEXT=""
+          fi
+
+          # Build comment HTML
+          if [ -n "$COMMENT_TEXT" ]; then
+            COMMENT_HTML=$(echo "$COMMENT_TEXT" | pandoc -f gfm -t html)
+          else
+            COMMENT_HTML="<em>N/A</em>"
+          fi
+
+          # Detect template usage and conditionally build description block
+          if echo "$ISSUE_BODY" | grep -qE '(^###|<!--)'; then
+            ISSUE_BODY_HTML=$(echo "$ISSUE_BODY" | pandoc -f gfm -t html)
+            DESCRIPTION_BLOCK="<hr/>
+          <h3 style='color:#24292f;'>Description</h3>
+          <div style='font-family:sans-serif;background:#f6f8fa;padding:12px;border-radius:6px;'>$ISSUE_BODY_HTML</div>"
+          else
+            DESCRIPTION_BLOCK=""
+          fi
+
+          # Build full email body
+          EMAIL_BODY="<h2 style='color:#24292f;'>GitHub Issue Notification</h2>
+          <table style='border-collapse:collapse;font-family:sans-serif;'>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Repository</b></td>
+              <td>${{ github.repository }}</td>
+            </tr>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Event</b></td>
+              <td>${{ github.event_name }}</td>
+            </tr>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Action</b></td>
+              <td>${{ github.event.action }}</td>
+            </tr>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Actor</b></td>
+              <td>${{ github.actor }}</td>
+            </tr>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Issue</b></td>
+              <td><a href='${{ github.event.issue.html_url }}'>${{ github.event.issue.title }}</a></td>
+            </tr>
+            <tr>
+              <td style='padding:4px 12px 4px 0;color:#57606a;'><b>Labels</b></td>
+              <td>${{ join(github.event.issue.labels.*.name, ', ') || 'None' }}</td>
+            </tr>
+          </table>
+          $DESCRIPTION_BLOCK
+          <hr/>
+          <h3 style='color:#24292f;'>Comment</h3>
+          <div style='font-family:sans-serif;background:#f6f8fa;padding:12px;border-radius:6px;'>$COMMENT_HTML</div>"
+
+          {
+            echo "body<<EOF"
+            echo "$EMAIL_BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "[${{ github.repository }}] Issue ${{ github.event.action }}: ${{ github.event.issue.title }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: GitHub Alerts <${{ secrets.SMTP_USERNAME }}>
+          html_body: ${{ steps.meta.outputs.body }}
