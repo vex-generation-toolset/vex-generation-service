@@ -26,3 +26,9 @@ VGS, or VEX Generation Service is a part of Project Clean Beach. This service ge
 ## Contributions
 
 For developing a new feature, create an issue related to that feature or enhancement. Then create a branch from `master`/`main` called `X-dev` where `X` is the issue number. Changes should be made to that branch. Upon finalization, the commits of the feature branch should be rebased against `master`/`main` and then squashed into a single one. Then that commit will be cherry-picked to the main branch. The old branch (`X-dev`) will be deleted.
+
+## Contact Information
+
+**VEX generation for open source projects:** Please contact with <munawar@openrefactory.com> for more information.
+
+**VEX generation for commercial entities:** Please check out OpenRefactory's [Project Clean Beach (PCB)](https://www.openrefactory.com/pcb) service for more information.
