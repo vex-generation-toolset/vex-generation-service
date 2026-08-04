@@ -6,16 +6,16 @@ import json
 import subprocess
 from pathlib import Path
 
-from function import Function
-from graph import load_graph
-from utils import (
+from vex_generation_service.function import Function
+from vex_generation_service.graph import load_graph
+from vex_generation_service.utils import (
     CustomEncoder,
     Package,
     merge_call_chains,
     name,
 )
-from vexDocument import PackageToVex
-from vexGenerator import VexGenerator
+from vex_generation_service.vexDocument import PackageToVex
+from vex_generation_service.vexGenerator import VexGenerator
 
 
 class Analysis:

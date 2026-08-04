@@ -9,8 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict
 
-from function import Function
-from utils import Call, is_candidate, score_candidate
+from vex_generation_service.function import Function
+from vex_generation_service.utils import Call, is_candidate, score_candidate
 
 
 @dataclass(frozen=True)

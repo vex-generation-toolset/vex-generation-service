@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-from function import Function
+from vex_generation_service.function import Function
 
 
 @dataclass(frozen=True)
